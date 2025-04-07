@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Study IA - Aprendizado Inteligente</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <style>
+      pre {
+        @apply bg-gray-100 p-4 rounded-lg overflow-x-auto my-4 font-mono text-sm;
+      }
+      code {
+        @apply bg-gray-100 px-1.5 py-0.5 rounded font-mono text-sm;
+      }
+      .important {
+        @apply font-bold text-blue-800;
+      }
+      .fade-in {
+        animation: fadeIn 0.5s ease-in;
+      }
+      @keyframes fadeIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+      .correct-answer {
+        @apply bg-green-50 border-green-200;
+      }
+      .incorrect-answer {
+        @apply bg-red-50 border-red-200;
+      }
+      .explanation-btn {
+        @apply mt-2 text-blue-600 hover:text-blue-800 text-sm underline cursor-pointer;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-gradient-to-br from-blue-50 via-white to-blue-50 min-h-screen flex items-center justify-center p-6"
+  >
+    <div
+      class="bg-white shadow-xl rounded-2xl p-8 w-full max-w-3xl transform transition-all hover:shadow-2xl"
+    >
+      <div id="step1" class="fade-in">
+        <header class="text-center mb-8">
+          <h1 class="text-4xl font-bold text-indigo-800">
+            <i class="fas fa-brain text-blue-600 mr-2"></i> Study IA
+          </h1>
+          <p class="text-gray-600 mt-2">
+            Seu assistente de estudos inteligente
+          </p>
+        </header>
+
+        <h2 class="text-2xl font-semibold text-gray-800 mb-4">
+          Escolha seu Tópico
+        </h2>
+        <div class="relative mb-4">
+          <input
+            type="text"
+            id="topicInput"
+            placeholder="Ex: Revolução Francesa ou Loops em JavaScript"
+            class="w-full p-3 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition duration-200"
+          />
+          <span
+            class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm"
+          >
+            Digite aqui
+          </span>
+        </div>
+        <button
+          id="explanationBtn"
+          class="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 transition duration-200 font-medium"
+        >
+          Gerar Explicação
+        </button>
+        <div
+          id="explanationResult"
+          class="mt-4 text-gray-700 prose max-w-none hidden"
+        ></div>
+
+        <!-- Botão para avançar para o passo 2 (questões) -->
+        <button
+          id="nextToQuestionsBtn"
+          class="w-full bg-green-600 text-white py-3 rounded-lg hover:bg-green-700 transition duration-200 font-medium mt-4 hidden"
+        >
+          Gerar Questões
+        </button>
+      </div>
+
+      <div id="step2" class="hidden fade-in">
+        <h2 class="text-2xl font-semibold text-gray-800 mb-4">
+          Teste seu Conhecimento
+        </h2>
+        <div id="questionsContainer" class="mt-4 space-y-4"></div>
+
+        <!-- Botão para avançar para o passo 3 (resultados) -->
+        <button
+          id="nextToResultsBtn"
+          class="w-full bg-purple-600 text-white py-3 rounded-lg hover:bg-purple-700 transition duration-200 font-medium mt-4"
+        >
+          Verificar Respostas
+        </button>
+      </div>
+
+      <div id="step3" class="hidden fade-in">
+        <h2 class="text-2xl font-semibold text-gray-800 mb-4">
+          Veja seus Resultados
+        </h2>
+        <div
+          id="resultScore"
+          class="mt-4 text-gray-800 font-medium space-y-2 mb-6"
+        ></div>
+
+        <div id="resultsContainer" class="space-y-4"></div>
+
+        <!-- Botão para voltar ao início -->
+        <button
+          id="restartBtn"
+          class="w-full bg-indigo-600 text-white py-3 rounded-lg hover:bg-indigo-700 transition duration-200 font-medium mt-4"
+        >
+          Voltar ao Início
+        </button>
+      </div>
+    </div>
+
+    <script>
+      let explanation = "";
+      let questions = [];
+      let userAnswers = {};
+
+      const goToStep = (stepNumber) => {
+        for (let i = 1; i <= 3; i++) {
+          const step = document.getElementById(`step${i}`);
+          if (i === stepNumber) {
+            step.classList.remove("hidden");
+            step.classList.add("fade-in");
+          } else {
+            step.classList.add("hidden");
+            step.classList.remove("fade-in");
+          }
+        }
+      };
+
+      const showError = (msg) => {
+        const toast = document.createElement("div");
+        toast.className =
+          "fixed bottom-4 right-4 bg-red-500 text-white p-4 rounded-lg shadow-lg";
+        toast.textContent = msg;
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3000);
+      };
+
+      function formatText(text) {
+        return text
+          .replace(/\*\*(.*?)\*\*/g, '<span class="important">$1</span>')
+          .replace(/```([\s\S]*?)```/g, "<pre>$1</pre>")
+          .replace(/`(.*?)`/g, "<code>$1</code>")
+          .replace(/\n/g, "<br>");
+      }
+
+      function typeWriter(text, element, delay = 6) {
+        element.innerHTML = "";
+        let i = 0;
+        const interval = setInterval(() => {
+          if (i < text.length) {
+            element.innerHTML = formatText(text.substring(0, ++i));
+            element.scrollIntoView({ behavior: "smooth", block: "nearest" });
+          } else {
+            clearInterval(interval);
+          }
+        }, delay);
+      }
+
+      async function fetchExplanation() {
+        const topic = document.getElementById("topicInput").value.trim();
+        if (!topic) return showError("Por favor, insira um tópico!");
+
+        const btn = document.getElementById("explanationBtn");
+        btn.disabled = true;
+        btn.textContent = "Carregando...";
+
+        try {
+          const response = await fetch("/api/explanation", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ topic }),
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            explanation = data.explanation;
+            const resultDiv = document.getElementById("explanationResult");
+            resultDiv.classList.remove("hidden");
+            typeWriter(explanation, resultDiv);
+
+            // Mostra o botão para ir para as questões
+            document
+              .getElementById("nextToQuestionsBtn")
+              .classList.remove("hidden");
+          } else {
+            showError("Erro ao gerar explicação!");
+          }
+        } catch (error) {
+          console.error("Erro:", error);
+          showError("Falha na conexão com o servidor!");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Gerar Explicação";
+        }
+      }
+
+      async function fetchQuestions() {
+        const topic = document.getElementById("topicInput").value.trim();
+        const btn = document.getElementById("nextToQuestionsBtn");
+        btn.disabled = true;
+        btn.textContent = "Gerando...";
+
+        try {
+          const response = await fetch("/api/questions", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ topic, explanation }),
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            questions = data.questions;
+            renderQuestions();
+            goToStep(2);
+          } else {
+            showError("Erro ao gerar questões!");
+          }
+        } catch (error) {
+          console.error("Erro:", error);
+          showError("Falha na conexão com o servidor!");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Gerar Questões";
+        }
+      }
+
+      function renderQuestions() {
+        const container = document.getElementById("questionsContainer");
+        container.innerHTML = "";
+        questions.forEach((q, i) => {
+          const block = document.createElement("div");
+          block.className =
+            "p-4 border border-gray-200 rounded-lg bg-white shadow-sm hover:shadow-md transition";
+          block.innerHTML = `
+            <p class="font-medium mb-3 text-gray-800">${i + 1}. ${formatText(
+            q.question
+          )}</p>
+            ${q.options
+              .map(
+                (opt, j) => `
+              <label class="block mb-2 text-gray-700 hover:bg-gray-50 p-2 rounded transition">
+                <input type="radio" name="q${i}" value="${j}" class="mr-2 accent-blue-600"> ${formatText(
+                  opt
+                )}
+              </label>
+            `
+              )
+              .join("")}
+          `;
+          container.appendChild(block);
+        });
+      }
+
+      function collectAnswers() {
+        userAnswers = {};
+        questions.forEach((_, i) => {
+          const selected = document.querySelector(
+            `input[name="q${i}"]:checked`
+          );
+          userAnswers[i] = selected ? Number(selected.value) : -1;
+        });
+        return userAnswers;
+      }
+
+      function renderResults(correctCount, score) {
+        const container = document.getElementById("resultsContainer");
+        container.innerHTML = "";
+
+        questions.forEach((q, i) => {
+          const correctIndex = q.correctAnswerIndex;
+          const userAnswerIndex = userAnswers[i];
+          const isCorrect = userAnswerIndex === correctIndex;
+
+          const block = document.createElement("div");
+          block.className = `p-4 border rounded-lg ${
+            isCorrect ? "correct-answer" : "incorrect-answer"
+          }`;
+
+          block.innerHTML = `
+            <p class="font-medium mb-2 text-gray-800">
+              ${i + 1}. ${formatText(q.question)}
+              <span class="ml-2 text-sm ${
+                isCorrect ? "text-green-600" : "text-red-600"
+              }">
+                ${isCorrect ? "✔️ Correta" : "❌ Incorreta"}
+              </span>
+            </p>
+            
+            <div class="mb-3">
+              ${q.options
+                .map((opt, j) => {
+                  let optionClass = "text-gray-700";
+                  if (j === correctIndex) {
+                    optionClass = "text-green-700 font-bold";
+                  } else if (j === userAnswerIndex && !isCorrect) {
+                    optionClass = "text-red-700 font-bold";
+                  }
+
+                  return `
+                  <div class="flex items-center mb-1">
+                    <input 
+                      type="radio" 
+                      ${j === userAnswerIndex ? "checked" : ""} 
+                      disabled 
+                      class="mr-2 ${
+                        j === correctIndex
+                          ? "accent-green-600"
+                          : "accent-red-600"
+                      }"
+                    >
+                    <span class="${optionClass}">${formatText(opt)}</span>
+                    ${
+                      j === correctIndex && !isCorrect
+                        ? '<span class="ml-2 text-xs text-green-600">(Resposta correta)</span>'
+                        : ""
+                    }
+                  </div>
+                `;
+                })
+                .join("")}
+            </div>
+            
+            ${
+              q.explanation
+                ? `
+              <div class="explanation-btn" onclick="showExplanation(${i}, this)">
+                Mostrar explicação
+              </div>
+              <div id="explanation-${i}" class="hidden"></div>
+            `
+                : ""
+            }
+          `;
+
+          container.appendChild(block);
+        });
+
+        document.getElementById("resultScore").innerHTML = `
+          <p class="text-lg text-gray-800">Acertos: ${correctCount} de ${questions.length}</p>
+          <p class="text-lg text-gray-800">Nota: ${score}%</p>
+        `;
+      }
+
+      function showExplanation(index, buttonElement) {
+        const explanationDiv = document.getElementById(`explanation-${index}`);
+        if (explanationDiv.innerHTML.trim() === "") {
+          const explanation =
+            questions[index].explanation || "Sem explicação disponível.";
+          buttonElement.textContent = "Digitando explicação...";
+          typeWriter(explanation, explanationDiv, 20);
+        }
+        explanationDiv.classList.toggle("hidden");
+        buttonElement.textContent = explanationDiv.classList.contains("hidden")
+          ? "Mostrar explicação"
+          : "Ocultar explicação";
+      }
+
+      async function validateAnswers() {
+        collectAnswers();
+
+        // Verifica se todas as questões foram respondidas
+        const unanswered = Object.values(userAnswers).filter(
+          (a) => a === -1
+        ).length;
+        if (unanswered > 0) {
+          return showError(
+            `Por favor, responda todas as questões! (Faltam ${unanswered})`
+          );
+        }
+
+        const btn = document.getElementById("nextToResultsBtn");
+        btn.disabled = true;
+        btn.textContent = "Corrigindo...";
+
+        try {
+          const response = await fetch("/api/check-answers", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ questions, userAnswers }),
+          });
+          const data = await response.json();
+
+          if (data.success) {
+            renderResults(data.correct, data.score);
+            goToStep(3);
+          } else {
+            showError("Erro ao corrigir respostas!");
+          }
+        } catch (error) {
+          console.error("Erro:", error);
+          showError("Falha na conexão com o servidor!");
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Verificar Respostas";
+        }
+      }
+
+      // Event listeners
+      document
+        .getElementById("explanationBtn")
+        .addEventListener("click", fetchExplanation);
+      document
+        .getElementById("nextToQuestionsBtn")
+        .addEventListener("click", fetchQuestions);
+      document
+        .getElementById("nextToResultsBtn")
+        .addEventListener("click", validateAnswers);
+      document.getElementById("restartBtn").addEventListener("click", () => {
+        // Resetar tudo e voltar ao passo 1
+        explanation = "";
+        questions = [];
+        userAnswers = {};
+        document.getElementById("explanationResult").innerHTML = "";
+        document.getElementById("explanationResult").classList.add("hidden");
+        document.getElementById("nextToQuestionsBtn").classList.add("hidden");
+        document.getElementById("questionsContainer").innerHTML = "";
+        document.getElementById("resultsContainer").innerHTML = "";
+        document.getElementById("resultScore").innerHTML = "";
+        document.getElementById("topicInput").value = "";
+        goToStep(1);
+      });
+    </script>
+  </body>
+</html>
